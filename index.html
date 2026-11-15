@@ -59,7 +59,6 @@ tbody tr.selected { background: color-mix(in srgb, var(--accent) 18%, transparen
       </label>
       <button id="applyBtn">Apply filter</button>
       <button id="resetBtn">Reset</button>
-      <button id="exportBtn" class="spacer">Export CSV</button>
     </div>
   </section>
 
@@ -234,20 +233,6 @@ $("applyBtn").onclick = render;
 $("sort").onchange = render;
 $("filter").onkeydown = e => { if (e.key === "Enter") render(); };
 $("resetBtn").onclick = () => { $("filter").value = ""; $("sort").value = "ID"; render(); };
-
-$("exportBtn").onclick = () => {
-  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [["ID", "NAMA", "HARGA", "STOK", "KATEGORI"].join(",")]
-    .concat([...products].sort((a, b) => a.ID - b.ID)
-      .map(p => [p.ID, esc(p.NAMA), p.HARGA, p.STOK, esc(p.KATEGORI)].join(",")));
-  const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "products.csv";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  status(`Exported ${products.length} rows.`);
-};
 
 load();
 render();
