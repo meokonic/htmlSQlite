@@ -1,12 +1,256 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Hello, World!</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-      <h1 class="title">Hello testing123!</h1>
-      <p id="currentTime"></p>
-      <script src="script.js"></script>
-  </body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Manager</title>
+<style>
+:root {
+  --bg: #f5f7f6; --surface: #ffffff; --text: #1d2a27; --muted: #5d6b67;
+  --line: #d5dedb; --accent: #1f6f5c; --accent-text: #ffffff; --danger: #b3382c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131a18; --surface: #1c2623; --text: #e6efec; --muted: #93a39e;
+    --line: #2f3d39; --accent: #4fb69b; --accent-text: #0e1513; --danger: #ef7b6e;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+main { max-width: 960px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 1.5rem; margin: 0 0 16px; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+h2 { font-size: .95rem; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: .85rem; color: var(--muted); }
+input, select { font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+button { font: inherit; padding: 7px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button:hover { filter: brightness(.95); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.spacer { margin-left: auto; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: center; }
+th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+td.name, th.name { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+tbody tr.selected { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#status { color: var(--muted); font-size: .9rem; padding: 4px 2px; }
+.empty { padding: 18px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Inventory Manager</h1>
+
+  <section>
+    <div class="row">
+      <label>Category <input id="filter" size="14" placeholder="e.g. 1"></label>
+      <label>Sort by
+        <select id="sort">
+          <option value="ID">Default (ID)</option>
+          <option value="KATEGORI">Category</option>
+          <option value="HARGA">Lowest price</option>
+          <option value="STOK">Lowest stock</option>
+        </select>
+      </label>
+      <button id="applyBtn">Apply filter</button>
+      <button id="resetBtn">Reset</button>
+      <button id="exportBtn" class="spacer">Export CSV</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th class="name">NAMA</th><th>HARGA</th><th>STOK</th><th>KATEGORI</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty" hidden>No products to show. Add one below.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Product</h2>
+    <div class="row">
+      <label>Name <input id="name" size="22"></label>
+      <label>Price (Rp) <input id="price" type="number" min="0" step="1" style="width:120px"></label>
+      <label>Stock <input id="stock" type="number" min="0" step="1" style="width:90px"></label>
+      <label>Category <input id="cat" size="12"></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="addBtn" class="primary">Add</button>
+      <button id="updateBtn">Update selected</button>
+      <button id="deleteBtn" class="danger">Delete selected</button>
+      <button id="clearBtn">Clear form</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Transaction (select a product in the table)</h2>
+    <div class="row">
+      <label>Quantity sold <input id="qty" type="number" min="1" step="1" value="1" style="width:90px"></label>
+      <button id="sellBtn" class="primary">Process transaction</button>
+    </div>
+  </section>
+
+  <div id="status" role="status">Ready.</div>
+</main>
+
+<script>
+const KEY = "inventory-products";
+const $ = id => document.getElementById(id);
+let products = [];
+let selectedId = null;
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY));
+    if (Array.isArray(saved)) { products = saved; return; }
+  } catch (e) {}
+  products = [
+    { ID: 1, NAMA: "Rapha", HARGA: 5000, STOK: 5, KATEGORI: "1" },
+    { ID: 2, NAMA: "Matthew", HARGA: 5000, STOK: 5, KATEGORI: "2" }
+  ];
+  save();
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(products)); } catch (e) {}
+}
+function nextId() { return products.reduce((m, p) => Math.max(m, p.ID), 0) + 1; }
+const rp = n => "Rp " + Number(n).toLocaleString("en-US");
+const status = msg => $("status").textContent = msg;
+
+function visibleProducts() {
+  const cat = $("filter").value.trim();
+  const key = $("sort").value;
+  const list = products.filter(p => !cat || p.KATEGORI === cat);
+  list.sort((a, b) => {
+    const x = a[key], y = b[key];
+    const c = typeof x === "number" ? x - y : String(x).localeCompare(String(y));
+    return c || a.ID - b.ID;
+  });
+  return list;
+}
+
+function render() {
+  const list = visibleProducts();
+  const tbody = $("rows");
+  tbody.innerHTML = "";
+  for (const p of list) {
+    const tr = document.createElement("tr");
+    if (p.ID === selectedId) tr.className = "selected";
+    const cells = [p.ID, p.NAMA, rp(p.HARGA), p.STOK + "x", p.KATEGORI];
+    cells.forEach((v, i) => {
+      const td = document.createElement("td");
+      if (i === 1) td.className = "name";
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    tr.onclick = () => selectProduct(p.ID);
+    tbody.appendChild(tr);
+  }
+  $("empty").hidden = list.length > 0;
+  const cat = $("filter").value.trim();
+  status(cat && !list.length ? `No products found in category '${cat}'.` : `${list.length} product(s) shown.`);
+}
+
+function selectProduct(id) {
+  const p = products.find(x => x.ID === id);
+  if (!p) return;
+  selectedId = id;
+  $("name").value = p.NAMA; $("price").value = p.HARGA;
+  $("stock").value = p.STOK; $("cat").value = p.KATEGORI;
+  render();
+}
+
+function readForm() {
+  const name = $("name").value.trim();
+  const cat = $("cat").value.trim();
+  if (!name) { alert("Name cannot be empty."); return null; }
+  const price = Number($("price").value), stock = Number($("stock").value);
+  if ($("price").value === "" || $("stock").value === "" || !Number.isInteger(price) || !Number.isInteger(stock)) {
+    alert("Price and stock must be whole numbers."); return null;
+  }
+  if (price < 0 || stock < 0) { alert("Price and stock cannot be negative."); return null; }
+  return { NAMA: name, HARGA: price, STOK: stock, KATEGORI: cat };
+}
+
+function clearForm() {
+  selectedId = null;
+  ["name", "price", "stock", "cat"].forEach(id => $(id).value = "");
+  render();
+}
+
+function requireSelection() {
+  if (selectedId === null) { alert("Please select a product in the table first."); return false; }
+  return true;
+}
+
+$("addBtn").onclick = () => {
+  const data = readForm(); if (!data) return;
+  products.push({ ID: nextId(), ...data });
+  save(); clearForm(); status(`Added '${data.NAMA}'.`);
+};
+
+$("updateBtn").onclick = () => {
+  if (!requireSelection()) return;
+  const data = readForm(); if (!data) return;
+  Object.assign(products.find(p => p.ID === selectedId), data);
+  save(); render(); status(`Updated product ID ${selectedId}.`);
+};
+
+$("deleteBtn").onclick = () => {
+  if (!requireSelection()) return;
+  if (!confirm(`Delete product ID ${selectedId}?`)) return;
+  const id = selectedId;
+  products = products.filter(p => p.ID !== id);
+  save(); clearForm(); status(`Deleted product ID ${id}.`);
+};
+
+$("clearBtn").onclick = clearForm;
+
+$("sellBtn").onclick = () => {
+  if (!requireSelection()) return;
+  const qty = Number($("qty").value);
+  if (!Number.isInteger(qty) || qty <= 0) { alert("Quantity must be a positive whole number."); return; }
+  const p = products.find(x => x.ID === selectedId);
+  if (!p) { alert("Product not found."); return; }
+  const sold = Math.min(qty, p.STOK);
+  const warning = qty > p.STOK ? `Only ${p.STOK} in stock, sold ${sold}.\n\n` : "";
+  p.STOK -= sold;
+  const profit = sold * p.HARGA;
+  save();
+  $("stock").value = p.STOK;
+  render();
+  alert(`${warning}${p.NAMA} now has ${p.STOK}x in stock.\nGross profit: ${rp(profit)}`);
+  status(`Sold ${sold}x ${p.NAMA} for ${rp(profit)}.`);
+};
+
+$("applyBtn").onclick = render;
+$("sort").onchange = render;
+$("filter").onkeydown = e => { if (e.key === "Enter") render(); };
+$("resetBtn").onclick = () => { $("filter").value = ""; $("sort").value = "ID"; render(); };
+
+$("exportBtn").onclick = () => {
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = [["ID", "NAMA", "HARGA", "STOK", "KATEGORI"].join(",")]
+    .concat([...products].sort((a, b) => a.ID - b.ID)
+      .map(p => [p.ID, esc(p.NAMA), p.HARGA, p.STOK, esc(p.KATEGORI)].join(",")));
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "products.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  status(`Exported ${products.length} rows.`);
+};
+
+load();
+render();
+</script>
+</body>
 </html>
